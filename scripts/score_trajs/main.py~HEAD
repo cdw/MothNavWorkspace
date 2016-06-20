@@ -60,7 +60,6 @@ def main():
    # plt.show()
 
    handle.close()
-
    print("~~Done :)")
 
 

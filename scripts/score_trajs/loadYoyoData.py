@@ -14,7 +14,11 @@ def load_dataframe(file_format,file_path):
       print("(!) ERROR: "+file_path+" does not exist.")
       return None
 
+<<<<<<< HEAD:scripts/loadYoyoData.py
    print("loading: "+file_path)
+=======
+   print("loading: "+fpath)
+>>>>>>> SpaceKitKat/master:scripts/score_trajs/loadYoyoData.py
 
    if(file_format == 'csv'):
       dt = pd.read_csv(file_path,delimiter=',')
@@ -26,7 +30,10 @@ def load_dataframe(file_format,file_path):
       print("(!) load_data: file file_format, "+file_format+", is unrecognized.")
       dt = None
 
+<<<<<<< HEAD:scripts/loadYoyoData.py
 
+=======
+>>>>>>> SpaceKitKat/master:scripts/score_trajs/loadYoyoData.py
    return dt
 
 def save_dataframe(data_frame,file_format,file_path):
