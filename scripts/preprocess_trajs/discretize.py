@@ -9,54 +9,73 @@ PAD = 1  # patches are padded with PAD*max(tree radius)
 
 def pack(mat,data,ii,arr):
   """
-  (ndarray,[double*(4)],int,ndarray)-> None
+  (numpy.ndarray,[double*(4)],int,numpy.ndarray)-> None
+
   Converts a matrix to a sparse mat then creates a tuple containing
   this sparse matrix and the elements from data list. This tuple is
   inserted to the array at ii. We check that ii is within the bounds
   of the array. If ii exceeds the boundaries of the array, then the
   edges (i.e., 0 and len(array)-1) are overwritten; and a warning is
-  uttered.
+  uttered. If data is not length 4, then a warning message is given
+  and NaN values are packed into the array.
   """
+  if (data == None or len(data) != 4):
+    print("discretize.pack: WARN: Data is invalid length.")
+    data=[float('NaN')]*4
   if (ii < 0 or len(arr) <= ii):
-    print("pack: warn: overwritting list data")
+    print("discretize.pack: WARN: Overwritting list data")
   bounded_index = min(max(ii,0),len(arr))
   sparse_mat = bsr_matrix(mat).tobsr()
   arr[bounded_index] = (sparse_mat,data[0],data[1],data[2],data[3])
   return
 
-def get_patch(origin,env):
+def get_patch(origin,forest):
   """
   ([double*(2)],pandas.dataframe) -> [pandas.dataframe,int]
+
   Returns a slice of the forest that is within a square
-  neighborhood, described as patch_size, about the origin.
+  neighborhood, described by patch_size*2, about the origin.
   The trees are included in the neighborhood if they entirely
   fall in the boundary of the neighborhood. In other words,
   all the tree's surface is within the square boundary.
+
+  Example:
+  (see discretize)
   """
-  patch_size = (int)(max(env.r)*(10 + PAD))
-  l = origin[0]-patch_size < env.x-env.r
-  r = env.x+env.r < origin[0]+patch_size
-  u = env.y+env.r < origin[1]+patch_size
-  d = origin[1]-patch_size < env.y-env.r
-  patch = env[l & r & u & d]
+  patch_size = (int)(max(forest.r)*(10 + PAD))
+  l = origin[0]-patch_size < forest.x-forest.r
+  r = forest.x+forest.r < origin[0]+patch_size
+  u = forest.y+forest.r < origin[1]+patch_size
+  d = origin[1]-patch_size < forest.y-forest.r
+  patch = forest[l & r & u & d]
   return [patch, patch_size]
 
-# computes matrix indices as ith-block and
-# jth-block between tcenter and origin.
 def map_to_mat_idx(tcenter,origin,bsize):
   """
-  (ndarray,ndarray,int) -> (int,int)
-  Computes the distance between tree center and
-  origin in units of block size. Since the origin
-  is meant to be at the center of an odd grid,
-  the distance is computed as a count of half
-  blocks. Then this count is converted to whole
-  blocks in the x and y direction and returned
-  as a tuple.
+  (numpy.ndarray,numpy.ndarray,int) -> (int,int)
+
+  Computes the distance between tree center and origin in units of
+  block size. Since the origin is meant to be at the center of an
+  odd grid, the distance is computed as a count of half blocks.
+  Then this count is converted to whole blocks in the x and y
+  direction and returned as a tuple. If block size is not valid,
+  i.e., negative or zero, then (NaN,NaN) is returned.
+
+  Example:
+  >>> from fileio import load_dataframe
+  >>> trees = load_dataframe("csv",dump+"/trees.csv")
+   loading: /home/bilkit/Dropbox/moth_nav_analysis/scripts/test/trees.csv
+  >>> tree = trees.values[0]
+  >>> bin_size = min(trees.r)/2
+  >>> [binned_radius,tmp] = map_to_mat_idx((tree[0]+tree[2],tree[1])
+    ,tree
+    ,bin_size)
+  >>> binned_radius,tmp
+  (2, 0)
   """
   # avoid divide by zero or neg
   if (bsize <= 0):
-    print("(!) map_to_mat_idx: invalid bsize "+str(bsize))
+    print("(!) discretize.map_to_mat_idx: Invalid bsize "+str(bsize))
     return (float('NaN'),float('NaN'))
 
   # get deltax, deltay
@@ -71,78 +90,101 @@ def map_to_mat_idx(tcenter,origin,bsize):
 
   return (ii,jj)
 
-# divide patch into min tree radius/2 sized
-# blocks and bin tree points into a matrix
-# MxM.
-# ARGS: moth point, tree patch, patch size,
-#   min(tree radius)
-# RETURNS: matrix MxM, block size, where
-#   M = 2*patch/block size (odd)
-#   returns block size = -1 if error
-def discretize(pt,patch,sz,rmin):
+def discretize(point,patch,patch_size,minimum_radius):
+  """
+  (numpy.ndarray,pandas.dataframe or Series,int,int) -> [numpy.ndarray,int]
+
+  Given a dataframe of trees, quantize the (x,y,r) of the trees and create a
+  binary mask that represents trees with ones. The point (x,y) defines the
+  center of the mask, which is always odd. The mask and the bin size are
+  returned. If the minimum radius is negative or the bin size is too small,
+  then [None,-1] is returned.
+
+   Examples:
+   >>> from fileio import load_dataframe
+   >>> from plotStuff import plot_mat
+   >>> import os
+   >>> dump = os.getcwd()+"/test"
+   >>> traj = load_dataframe("h5",dump+"/moth1_448f0.h5")
+   loading: /home/bilkit/Dropbox/moth_nav_analysis/scripts/test/moth1_448f0.h5
+   >>> point = traj[["pos_x","pos_y"]].iloc[400]
+   >>> trees = load_dataframe("csv",dump+"/trees.csv")
+   loading: /home/bilkit/Dropbox/moth_nav_analysis/scripts/test/trees.csv
+   >>> patch,size = get_patch(point,trees)
+   >>> [mask, bsize] = discretize(point,patch,size,min(trees.r))
+   >>> plot_mat(mask,bsize,targ_file=dump+"/discretize.png")
+   plotting mat(111x111)
+  """
   # convert dataframes to numpy arrays
-  if(isinstance(pt,pd.Series)):
-    pt = pt.values
+  if(isinstance(point,pd.Series)):
+    point = point.values
   if(isinstance(patch,pd.DataFrame)
     or isinstance(patch,pd.Series)):
     patch = patch.values
 
-  if(rmin < 0):
-    print("(!) Negative rmin")
+  if(minimum_radius < 0):
+    print("(!) discretize.discretize: Negative minimum_radius")
     return [None,-1]
   # get block size
-  SZb = rmin/2
+  bin_size = minimum_radius/2
 
   # initialize matrix
-  Nb = int(2*sz/SZb)
+  n_bins = int(2*patch_size/bin_size)
   # make sure matrix is oddxodd and not ridiculously large
-  Nb += (Nb+1)%2
-  if(sys.maxsize < Nb):
-    print("(!) outrageous mat size, block size is too small")
+  n_bins += (n_bins+1)%2
+  if(sys.maxsize < n_bins):
+    print("(!) discretize.discretize: Outrageous mat size, block size is too small")
     return [None,-1]
 
   # init matrix that hold binary values
-  mat = np.zeros((Nb,Nb),dtype=int)
+  mat = np.zeros((n_bins,n_bins),dtype=int)
 
   # mark moth block bm(0,0)
-  mat[int(Nb/2)][int(Nb/2)] = -1
+  mat[int(n_bins/2)][int(n_bins/2)] = -1
 
-  for tt in patch:
+  for tree in patch:
     # get tree center (block size should be non-zero)
-    itt = map_to_mat_idx(tt,pt,SZb)
+    binned_tree_loc = map_to_mat_idx(tree,point,bin_size)
 
     # convert tree radius to nblocks
-    rr = tt[2] # length from center to EDGE of sq = tradius
-    rr2 = rr**2
-    rr_root2_by2 = (2**0.5)*rr / 2 # length from center to CORNER of sq = tradius
-    [rb,tmp] = map_to_mat_idx((tt[0]+rr,tt[1]),tt,SZb)
-    [rb_root2_by2,tmp] = map_to_mat_idx((tt[0]+rr_root2_by2,tt[1]),tt,SZb)
+    radius = tree[2] # length from center to EDGE of sq = tradius
+    radius_squared = radius**2
+    radius_root2_by2 = (2**0.5)*radius / 2 # length from center to CORNER of sq = tradius
+    [binned_radius,tmp] = map_to_mat_idx((tree[0]+radius,tree[1])
+      ,tree
+      ,bin_size)
+    [binned_radius_root2_by2,tmp] = map_to_mat_idx((tree[0]+radius_root2_by2,tree[1])
+      ,tree
+      ,bin_size)
 
-    # create a mask of 1's centered on tree
-    tsize = 2*rb + 1
-    mask = np.ones((tsize,tsize),dtype=int)
-    # trim mask
-    for i in range(0,tsize):
-      # offset defines the beginning of the range of columns to analyse
-      offset = 2*rb_root2_by2
-      if (i <= rb - rb_root2_by2 or rb + rb_root2_by2 <= i):
+    # create a sub-mask of 1's centered on tree (+1 accounts for tree center)
+    l_outter_square = 2*binned_radius + 1
+    l_inner_square = 2*binned_radius_root2_by2 + 1
+    mask = np.ones((l_outter_square,l_outter_square),dtype=int)
+    # trim sub-mask to approximate a circular tree
+    for row in range(0,l_outter_square):
+      offset = l_inner_square - 1
+      inner_left_edge = binned_radius - binned_radius_root2_by2
+      inner_right_edge = binned_radius + binned_radius_root2_by2
+      # inspect all columns if row is not in the inner square, otherwise only
+      # inspect the columns that are in the outter square.
+      if (row <= inner_left_edge or inner_right_edge <= row):
         offset = 0
-      # check that distance from center to block is < tree radius
-      for j in range(0, rb - rb_root2_by2):
-        if (rr2 < ((i-rb)*SZb)**2 + ((j-rb)*SZb)**2):
-          mask[i][j] = 0
-
-      for j in range(rb - rb_root2_by2 + offset,tsize):
-        if (rr2 < ((i-rb)*SZb)**2 + ((j-rb)*SZb)**2):
-          mask[i][j] = 0
+      # inspection: check that distance from center to block is < tree radius
+      for col in range(0, inner_left_edge):
+        if (radius_squared < ((row-binned_radius)*bin_size)**2 + ((col-binned_radius)*bin_size)**2):
+          mask[row][col] = 0
+      for col in range(inner_left_edge + offset,l_outter_square):
+        if (radius_squared < ((row-binned_radius)*bin_size)**2 + ((col-binned_radius)*bin_size)**2):
+          mask[row][col] = 0
 
     # apply mask over tree center (within boundaries of mat)
-    xmin,xmax = itt[0] - rb + int(Nb/2), itt[0] + rb + int(Nb/2)
-    ymin,ymax = itt[1] - rb + int(Nb/2), itt[1] + rb + int(Nb/2)
+    xmin,xmax = binned_tree_loc[0] - binned_radius + int(n_bins/2), binned_tree_loc[0] + binned_radius + int(n_bins/2)
+    ymin,ymax = binned_tree_loc[1] - binned_radius + int(n_bins/2), binned_tree_loc[1] + binned_radius + int(n_bins/2)
     mat[xmin:xmax+1].T[ymin:ymax+1] = np.bitwise_or(mat[xmin:xmax+1].T[ymin:ymax+1],mask)
     # mark tree center
-    icenter = int(Nb/2)+itt[0];
-    jcenter = int(Nb/2)+itt[1];
+    icenter = int(n_bins/2)+binned_tree_loc[0];
+    jcenter = int(n_bins/2)+binned_tree_loc[1];
     mat[icenter][jcenter] = -1
 
-  return [mat,SZb]
+  return [mat,bin_size]
