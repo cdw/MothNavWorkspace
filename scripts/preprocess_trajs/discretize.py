@@ -13,11 +13,12 @@ def pack(mat,data,ii,arr):
 
   Converts a matrix to a sparse mat then creates a tuple containing
   this sparse matrix and the elements from data list. This tuple is
-  inserted to the array at ii. We check that ii is within the bounds
-  of the array. If ii exceeds the boundaries of the array, then the
-  edges (i.e., 0 and len(array)-1) are overwritten; and a warning is
-  uttered. If data is not length 4, then a warning message is given
-  and NaN values are packed into the array.
+  inserted to the array at ii.
+  We check that ii is within the bounds of the array. If ii exceeds
+  the boundaries of the array, then the edges (i.e., 0 and len(array)-1)
+  are overwritten; and a warning is uttered.
+  If data is not length 4, then a warning message is given and NaN
+  values are packed into the array.
   """
   if (data == None or len(data) != 4):
     print("discretize.pack: WARN: Data is invalid length.")
@@ -43,10 +44,10 @@ def get_patch(origin,forest):
   (see discretize)
   """
   patch_size = (int)(max(forest.r)*(10 + PAD))
-  l = origin[0]-patch_size < forest.x-forest.r
-  r = forest.x+forest.r < origin[0]+patch_size
-  u = forest.y+forest.r < origin[1]+patch_size
-  d = origin[1]-patch_size < forest.y-forest.r
+  l = float(origin[0]-patch_size) < forest.x-forest.r
+  r = forest.x+forest.r < float(origin[0]+patch_size)
+  u = forest.y+forest.r < float(origin[1]+patch_size)
+  d = float(origin[1]-patch_size) < forest.y-forest.r
   patch = forest[l & r & u & d]
   return [patch, patch_size]
 
@@ -63,13 +64,15 @@ def map_to_mat_idx(tcenter,origin,bsize):
 
   Example:
   >>> from fileio import load_dataframe
+  >>> import os
+  >>> dump = os.getcwd()+"/test"
   >>> trees = load_dataframe("csv",dump+"/trees.csv")
-   loading: /home/bilkit/Dropbox/moth_nav_analysis/scripts/test/trees.csv
+  loading: /home/bilkit/Dropbox/moth_nav_analysis/scripts/test/trees.csv
   >>> tree = trees.values[0]
   >>> bin_size = min(trees.r)/2
   >>> [binned_radius,tmp] = map_to_mat_idx((tree[0]+tree[2],tree[1])
-    ,tree
-    ,bin_size)
+  ...   ,tree
+  ...   ,bin_size)
   >>> binned_radius,tmp
   (2, 0)
   """
@@ -188,3 +191,8 @@ def discretize(point,patch,patch_size,minimum_radius):
     mat[icenter][jcenter] = -1
 
   return [mat,bin_size]
+
+""" DOC TESTS """
+if __name__ == "__main__":
+   import doctest
+   doctest.testmod()
