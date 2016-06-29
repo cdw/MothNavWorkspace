@@ -1,2 +1,9 @@
 data/*
-scripts/*.png
+*/*.png
+*.png
+*/*.mtx
+*/*.npy
+*/*.csv
+*/*.h5
+
+
